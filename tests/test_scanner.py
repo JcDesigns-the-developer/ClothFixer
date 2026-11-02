@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from main import parse_asset, scan_folder, apply_changes
 
@@ -32,7 +33,9 @@ class ScannerTests(unittest.TestCase):
             self.assertIn("mp_m_freemode_01^jbib_000_u.ydd", targets)
             self.assertIn("mp_m_freemode_01^jbib_000_u.ytd", targets)
 
-            backup = apply_changes(changes, root)
+            with patch("main._run_binary_rewrites", return_value=({}, "mocked embedded rewrite")):
+                backup, summary = apply_changes(changes, root)
+            self.assertEqual(summary, "mocked embedded rewrite")
             self.assertTrue(backup.exists())
             self.assertTrue((root / "b" / "mp_m_freemode_01^jbib_000_u.ydd").exists())
             self.assertTrue((root / "b" / "mp_m_freemode_01^jbib_000_u.ytd").exists())
