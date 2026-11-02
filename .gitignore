@@ -2,7 +2,5 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
-dist/
-build/
-*.spec
-ClothFixer_Backups/
+**/bin/
+**/obj/
