@@ -96,30 +96,12 @@ internal static class Program
 
             var dictionary = drawable.ShaderGroup?.TextureDictionary;
             var textureItems = dictionary?.Textures?.data_items;
-            if (textureItems == null || textureItems.Length == 0)
-                continue;
-
             var renamedHashes = new Dictionary<uint, string>();
-            foreach (var texture in textureItems)
-            {
-                if (texture == null || string.IsNullOrEmpty(texture.Name))
-                    continue;
-
-                var oldHash = texture.NameHash;
-                var renamedTexture = ReplaceSlot(texture.Name, operation.OldSlot, operation.NewSlot);
-                if (string.Equals(renamedTexture, texture.Name, StringComparison.Ordinal))
-                    continue;
-
-                texture.Name = renamedTexture;
-                texture.NameHash = JenkHash.GenHash(renamedTexture.ToLowerInvariant());
-                renamedHashes[oldHash] = renamedTexture;
-                textureCount++;
-            }
-
-            if (renamedHashes.Count == 0)
-                continue;
-
+            var dictionaryNeedsRebuild = false;
             var shaders = drawable.ShaderGroup?.Shaders?.data_items;
+
+            // Some YDDs store embedded normal/specular textures directly in shader parameters.
+            // Rename those objects too, even when they are not listed in TextureDictionary.
             if (shaders != null)
             {
                 foreach (var shader in shaders)
@@ -130,7 +112,56 @@ internal static class Program
 
                     foreach (var parameter in parameters)
                     {
+                        if (parameter?.Data is not Texture embeddedTexture ||
+                            string.IsNullOrEmpty(embeddedTexture.Name))
+                            continue;
+
+                        var oldHash = embeddedTexture.NameHash;
+                        var renamedTexture = ReplaceSlot(embeddedTexture.Name, operation.OldSlot, operation.NewSlot);
+                        if (string.Equals(renamedTexture, embeddedTexture.Name, StringComparison.Ordinal))
+                            continue;
+
+                        embeddedTexture.Name = renamedTexture;
+                        embeddedTexture.NameHash = JenkHash.GenHash(renamedTexture.ToLowerInvariant());
+                        renamedHashes[oldHash] = renamedTexture;
+                        textureCount++;
+                        dictionaryNeedsRebuild = true;
+                    }
+                }
+            }
+
+            if (textureItems != null)
+            {
+                foreach (var texture in textureItems)
+                {
+                    if (texture == null || string.IsNullOrEmpty(texture.Name))
+                        continue;
+
+                    var oldHash = texture.NameHash;
+                    var renamedTexture = ReplaceSlot(texture.Name, operation.OldSlot, operation.NewSlot);
+                    if (string.Equals(renamedTexture, texture.Name, StringComparison.Ordinal))
+                        continue;
+
+                    texture.Name = renamedTexture;
+                    texture.NameHash = JenkHash.GenHash(renamedTexture.ToLowerInvariant());
+                    renamedHashes[oldHash] = renamedTexture;
+                    textureCount++;
+                    dictionaryNeedsRebuild = true;
+                }
+            }
+
+            if (renamedHashes.Count > 0 && shaders != null)
+            {
+                foreach (var shader in shaders)
+                {
+                    var parameters = shader?.ParametersList?.Parameters;
+                    if (parameters == null)
+                        continue;
+
+                    foreach (var parameter in parameters)
+                    {
                         if (parameter?.Data is TextureBase textureReference &&
+                            parameter.Data is not Texture &&
                             renamedHashes.TryGetValue(textureReference.NameHash, out var newTextureName))
                         {
                             textureReference.Name = newTextureName;
@@ -140,7 +171,8 @@ internal static class Program
                 }
             }
 
-            dictionary.BuildFromTextureList(textureItems.Where(x => x != null).ToList());
+            if (dictionary != null && textureItems != null && dictionaryNeedsRebuild)
+                dictionary.BuildFromTextureList(textureItems.Where(x => x != null).ToList());
         }
 
         var output = drawableCount == 0 && textureCount == 0 ? bytes : ydd.Save();
