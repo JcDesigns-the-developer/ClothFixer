@@ -158,6 +158,8 @@ def _run_binary_rewrites(changes: list[Rename], temp_dir: Path) -> tuple[dict[Pa
             "kind": old_asset.kind,
             "oldSlot": old_asset.number,
             "newSlot": new_asset.number,
+            "oldDrawableName": f"{old_asset.kind}_{old_asset.number:03d}_{old_asset.tail}",
+            "newDrawableName": f"{new_asset.kind}_{new_asset.number:03d}_{new_asset.tail}",
         })
         output_by_source[change.source.resolve()] = output
 
