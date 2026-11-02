@@ -185,6 +185,14 @@ internal static class Program
         }
 
         var output = drawableCount == 0 && textureCount == 0 ? bytes : ydd.Save();
+        if (drawableCount > 0 || textureCount > 0)
+        {
+            var verification = new YddFile();
+            await verification.LoadAsync(output);
+            if (verification.DrawableDict?.Drawables?.data_items?.Length != drawables.Length)
+                throw new InvalidDataException("Rewritten YDD failed its round-trip validation.");
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(operation.Output)!);
         await File.WriteAllBytesAsync(operation.Output, output);
         return new RewriteResult { File = operation.Input, DrawableNames = drawableCount, TextureNames = textureCount };
@@ -215,6 +223,14 @@ internal static class Program
         }
 
         var output = textureCount == 0 ? bytes : SaveYtd(ytd, textureItems);
+        if (textureCount > 0)
+        {
+            var verification = new YtdFile();
+            await verification.LoadAsync(output);
+            if (verification.TextureDict?.Textures?.data_items?.Length != textureItems.Length)
+                throw new InvalidDataException("Rewritten YTD failed its round-trip validation.");
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(operation.Output)!);
         await File.WriteAllBytesAsync(operation.Output, output);
         return new RewriteResult { File = operation.Input, TextureNames = textureCount };
