@@ -30,15 +30,15 @@ class ScannerTests(unittest.TestCase):
             assets, changes = scan_folder(root)
             targets = {change.destination.name for change in changes}
             self.assertEqual(len(assets), 3)
-            self.assertIn("mp_m_freemode_01^jbib_000_u.ydd", targets)
-            self.assertIn("mp_m_freemode_01^jbib_000_u.ytd", targets)
+            self.assertIn("mp_m_freemode_01^jbib_002_u.ydd", targets)
+            self.assertIn("mp_m_freemode_01^jbib_002_u.ytd", targets)
 
             with patch("main._run_binary_rewrites", return_value=({}, "mocked embedded rewrite")):
                 backup, summary = apply_changes(changes, root)
             self.assertEqual(summary, "mocked embedded rewrite")
             self.assertTrue(backup.exists())
-            self.assertTrue((root / "b" / "mp_m_freemode_01^jbib_000_u.ydd").exists())
-            self.assertTrue((root / "b" / "mp_m_freemode_01^jbib_000_u.ytd").exists())
+            self.assertTrue((root / "b" / "mp_m_freemode_01^jbib_002_u.ydd").exists())
+            self.assertTrue((root / "b" / "mp_m_freemode_01^jbib_002_u.ytd").exists())
             self.assertTrue((backup / "b" / second.name).exists())
 
     def test_binary_rewrite_failure_leaves_original_files_untouched(self):
@@ -58,7 +58,7 @@ class ScannerTests(unittest.TestCase):
 
             self.assertTrue(second.exists())
             self.assertEqual(second.read_bytes(), b"original second")
-            self.assertFalse((root / "b" / "mp_m_freemode_01^jbib_000_u.ydd").exists())
+            self.assertFalse((root / "b" / "mp_m_freemode_01^jbib_002_u.ydd").exists())
 
 
 if __name__ == "__main__":
