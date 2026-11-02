@@ -23,16 +23,22 @@ A small Windows desktop utility for scanning FiveM/GTA V clothing resource folde
 - .NET 10 SDK
 - Git
 
-## Clone
+## Download or clone
 
-Clone with the parser submodule so the binary helper can read and write GTA resources:
+You can either download the repository ZIP from GitHub or clone it:
 
-    git clone --recurse-submodules https://github.com/JcDesigns-the-developer/ClothFixer.git
+    git clone https://github.com/JcDesigns-the-developer/ClothFixer.git
     cd ClothFixer
 
-If the repository was cloned without submodules:
+The binary helper needs the CodeWalker parser source from grzyClothTool. GitHub ZIP downloads do not include Git submodules, so do not try to run `git submodule update` inside an extracted ZIP folder.
 
-    git submodule update --init --recursive
+## Build
+
+Run PowerShell from the extracted ClothFixer folder:
+
+    powershell -ExecutionPolicy Bypass -File .\build.ps1
+
+The script downloads the pinned grzyClothTool parser source into `vendor\grzyClothTool` when it is missing, then builds the .NET helper. It checks the actual .NET build exit code and will stop with an error if compilation fails.
 
 ## Run
 
