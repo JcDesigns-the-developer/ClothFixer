@@ -69,7 +69,7 @@ internal static class Program
         var ydd = new YddFile();
         await ydd.LoadAsync(bytes);
 
-        var drawables = ydd.Drawables ?? throw new InvalidDataException("YDD has no drawable array.");
+        var drawables = ydd.DrawableDict?.Drawables?.data_items ?? ydd.Drawables ?? throw new InvalidDataException("YDD has no drawable array.");
         if (drawables.Length == 0)
             throw new InvalidDataException("YDD contains no drawables.");
 
@@ -83,8 +83,10 @@ internal static class Program
             if (drawable == null)
                 continue;
 
-            var renamedDrawable = ReplaceSlot(drawable.Name, operation.OldSlot, operation.NewSlot);
-            if (!string.Equals(renamedDrawable, drawable.Name, StringComparison.Ordinal))
+            var renamedDrawable = string.IsNullOrEmpty(drawable.Name)
+                ? drawable.Name
+                : ReplaceSlot(drawable.Name, operation.OldSlot, operation.NewSlot);
+            if (!string.Equals(renamedDrawable, drawable.Name, StringComparison.Ordinal) && !string.IsNullOrEmpty(renamedDrawable))
             {
                 drawable.Name = renamedDrawable;
                 if (hashes != null && index < hashes.Length)
