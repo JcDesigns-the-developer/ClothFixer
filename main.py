@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
 import shutil
+import subprocess
+import tempfile
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from dataclasses import dataclass
@@ -120,39 +123,106 @@ def scan_folder(root: Path) -> tuple[list[Asset], list[Rename]]:
     return assets, changes
 
 
-def apply_changes(changes: list[Rename], root: Path) -> Path:
+def _binary_helper_project() -> Path:
+    return Path(__file__).resolve().parent / "binary_helper" / "ClothFixer.Binary.csproj"
+
+
+def _run_binary_rewrites(changes: list[Rename], temp_dir: Path) -> tuple[dict[Path, Path], str]:
+    """Rewrite embedded names in affected YDD/YTD files into temporary outputs."""
+    project = _binary_helper_project()
+    vendor_core = Path(__file__).resolve().parent / "vendor" / "grzyClothTool" / "CodeWalker" / "CodeWalker.Core" / "CodeWalker.Core.csproj"
+    if not project.exists() or not vendor_core.exists():
+        raise RuntimeError(
+            "The GTA binary parser is missing. Clone ClothFixer with its submodule: "
+            "git clone --recurse-submodules https://github.com/JcDesigns-the-developer/ClothFixer.git"
+        )
+    dotnet = shutil.which("dotnet")
+    if not dotnet:
+        raise RuntimeError(".NET 10 SDK is required to rewrite embedded GTA asset names. Install the .NET 10 SDK and try again.")
+
+    operations = []
+    output_by_source: dict[Path, Path] = {}
+    for index, change in enumerate(changes):
+        extension = change.source.suffix.lower()
+        if extension not in {".ydd", ".ytd"}:
+            continue
+        old_asset = parse_asset(change.source, change.source.parent)
+        new_asset = parse_asset(change.destination, change.destination.parent)
+        if old_asset is None or new_asset is None:
+            continue
+        output = temp_dir / f"rewritten_{index}{extension}"
+        operations.append({
+            "type": extension[1:],
+            "input": str(change.source.resolve()),
+            "output": str(output.resolve()),
+            "kind": old_asset.kind,
+            "oldSlot": old_asset.number,
+            "newSlot": new_asset.number,
+        })
+        output_by_source[change.source.resolve()] = output
+
+    if not operations:
+        return {}, "No YDD/YTD binaries needed rewriting."
+
+    manifest = temp_dir / "operations.json"
+    manifest.write_text(json.dumps(operations, indent=2), encoding="utf-8")
+    command = [dotnet, "run", "--project", str(project), "--configuration", "Release", "--", str(manifest)]
+    completed = subprocess.run(command, capture_output=True, text=True, cwd=project.parent)
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "Binary helper failed without a diagnostic.").strip()
+        raise RuntimeError(f"Embedded-name rewrite failed. No source files were renamed.\n\n{detail[-5000:]}")
+
+    try:
+        results = json.loads(completed.stdout.strip().splitlines()[-1])
+    except (json.JSONDecodeError, IndexError):
+        results = []
+    drawable_count = sum(int(item.get("drawableNames", 0)) for item in results)
+    texture_count = sum(int(item.get("textureNames", 0)) for item in results)
+    summary = f"Embedded names updated: {drawable_count} drawable name(s), {texture_count} texture name(s)."
+    return output_by_source, summary
+
+
+def apply_changes(changes: list[Rename], root: Path) -> tuple[Path, str]:
     if not changes:
         raise ValueError("There are no changes to apply.")
     backup_root = root.parent / "ClothFixer_Backups" / (root.name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S"))
     backup_root.mkdir(parents=True, exist_ok=False)
 
-    # Back up all affected files first, preserving relative paths.
     for change in changes:
         rel = change.source.relative_to(root)
         backup = backup_root / rel
         backup.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(change.source, backup)
 
-    # Two-phase rename allows swaps/overlapping names without clobbering.
-    staged = []
-    try:
-        for change in changes:
-            temp = change.source.with_name(f".clothfixer_{uuid4().hex}{change.source.suffix}")
-            change.source.rename(temp)
-            staged.append((temp, change.destination))
-        for temp, destination in staged:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            temp.rename(destination)
-    except Exception:
-        # Restore every staged file, including files already moved to destination.
-        for temp, destination in reversed(staged):
-            original = next(r.source for r in changes if r.destination == destination)
-            if destination.exists():
-                destination.rename(original)
-            elif temp.exists():
-                temp.rename(original)
-        raise
-    return backup_root
+    with tempfile.TemporaryDirectory(prefix="clothfixer_binary_") as temp_name:
+        binary_outputs, summary = _run_binary_rewrites(changes, Path(temp_name))
+        staged: list[tuple[Path, Path, Path]] = []
+        try:
+            for change in changes:
+                temp = change.source.with_name(f".clothfixer_{uuid4().hex}{change.source.suffix}")
+                change.source.rename(temp)
+                staged.append((temp, change.destination, change.source))
+
+            for staged_path, destination, original in staged:
+                rewritten = binary_outputs.get(original.resolve())
+                if rewritten is not None:
+                    rewritten.replace(destination)
+                    staged_path.unlink()
+                else:
+                    staged_path.rename(destination)
+        except Exception:
+            for staged_path, destination, original in reversed(staged):
+                if destination.exists():
+                    destination.unlink()
+                if staged_path.exists():
+                    staged_path.rename(original)
+                else:
+                    backup = backup_root / original.relative_to(root)
+                    if backup.exists():
+                        shutil.copy2(backup, original)
+            raise
+
+    return backup_root, summary
 
 
 class ClothFixerApp(tk.Tk):
@@ -186,7 +256,7 @@ class ClothFixerApp(tk.Tk):
         outer = ttk.Frame(self, padding=18)
         outer.pack(fill="both", expand=True)
         ttk.Label(outer, text="ClothFixer", font=("Segoe UI Semibold", 22)).pack(anchor="w")
-        ttk.Label(outer, text="Find repeated clothing drawable slots before importing into grzyClothTool.",
+        ttk.Label(outer, text="Repair duplicate clothing slots and update names inside GTA V assets.",
                   style="Muted.TLabel").pack(anchor="w", pady=(2, 14))
 
         top = ttk.Frame(outer)
@@ -198,8 +268,8 @@ class ClothFixerApp(tk.Tk):
 
         warning = tk.Label(
             outer,
-            text="FILENAME MODE ONLY — embedded names inside .ydd/.ytd binaries are not changed.",
-            bg="#49391f", fg="#ffe0a3", anchor="w", padx=10, pady=8,
+            text="BINARY-AWARE MODE — updates drawable names in .ydd files and texture entries in .ydd/.ytd files.",
+            bg="#203b32", fg="#c9f4df", anchor="w", padx=10, pady=8,
             font=("Segoe UI Semibold", 9)
         )
         warning.pack(fill="x", pady=(0, 12))
@@ -259,11 +329,11 @@ class ClothFixerApp(tk.Tk):
         if not self.changes or not self.root_folder:
             return
         count = len(self.changes)
-        if not messagebox.askyesno(APP_TITLE, f"Rename {count} file(s)?\n\nA backup will be created first."):
+        if not messagebox.askyesno(APP_TITLE, f"Rename {count} file(s) and update embedded binary names?\n\nA backup will be created first."):
             return
         try:
-            backup = apply_changes(self.changes, self.root_folder)
-            messagebox.showinfo(APP_TITLE, f"Finished.\n\nBackup: {backup}")
+            backup, summary = apply_changes(self.changes, self.root_folder)
+            messagebox.showinfo(APP_TITLE, f"Finished.\n\n{summary}\n\nBackup: {backup}")
             self.scan()
         except Exception as exc:
             messagebox.showerror("Fix failed", f"{exc}\n\nCheck the folder and backup before retrying.")
