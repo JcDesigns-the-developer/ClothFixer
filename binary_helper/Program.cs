@@ -55,7 +55,7 @@ internal static class Program
                 results.Add(result);
             }
 
-            Console.WriteLine(JsonSerializer.Serialize(results));
+            Console.WriteLine(JsonSerializer.Serialize(results, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
             return 0;
         }
         catch (Exception ex)
