@@ -58,4 +58,4 @@ Encrypted, malformed, or unsupported YDD/YTD files cause the operation to stop r
 
 ## Licensing
 
-The Python desktop application remains MIT-licensed. The separate binary helper is GPL-3.0-or-later and uses the pinned grzyClothTool submodule for its CodeWalker parser and resource serialization. See binary_helper/LICENSE and the submodule's license before redistributing the helper or a combined package.
+The Python desktop application remains MIT-licensed. The separate binary helper is GPL-3.0 and uses the pinned grzyClothTool submodule for its CodeWalker parser and resource serialization. See binary_helper/LICENSE and the submodule's license before redistributing the helper or a combined package.
