@@ -144,14 +144,13 @@ def apply_changes(changes: list[Rename], root: Path) -> Path:
             destination.parent.mkdir(parents=True, exist_ok=True)
             temp.rename(destination)
     except Exception:
-        # Best-effort rollback to original names.
-        for temp, destination in staged:
-            if temp.exists():
-                continue
+        # Restore every staged file, including files already moved to destination.
+        for temp, destination in reversed(staged):
+            original = next(r.source for r in changes if r.destination == destination)
             if destination.exists():
-                original = next((r.source for r in changes if r.destination == destination), None)
-                if original:
-                    destination.rename(original)
+                destination.rename(original)
+            elif temp.exists():
+                temp.rename(original)
         raise
     return backup_root
 
