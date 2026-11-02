@@ -99,7 +99,11 @@ def scan_folder(root: Path) -> tuple[list[Asset], list[Rename]]:
         # Keep the first stable path; move subsequent copies to free slots.
         duplicates.sort(key=lambda x: str(x.relative).lower())
         for duplicate in duplicates[1:]:
-            next_slot = next((n for n in range(0, MAX_SLOT + 1) if n not in reserved[group]), None)
+            # Prefer the next higher slot (001 -> 002); wrap to lower
+            # free slots only when the range above the duplicate is exhausted.
+            next_slot = next((n for n in range(slot + 1, MAX_SLOT + 1) if n not in reserved[group]), None)
+            if next_slot is None:
+                next_slot = next((n for n in range(0, slot) if n not in reserved[group]), None)
             if next_slot is None:
                 raise RuntimeError(f"No free drawable slots remain for {group[1]} ({group[0]}).")
             reserved[group].add(next_slot)
