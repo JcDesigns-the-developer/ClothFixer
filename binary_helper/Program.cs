@@ -11,6 +11,8 @@ internal sealed class RenameOperation
     public string Kind { get; set; } = "";
     public int OldSlot { get; set; }
     public int NewSlot { get; set; }
+    public string OldDrawableName { get; set; } = "";
+    public string NewDrawableName { get; set; } = "";
 }
 
 internal sealed class RewriteResult
@@ -83,10 +85,17 @@ internal static class Program
             if (drawable == null)
                 continue;
 
-            var renamedDrawable = string.IsNullOrEmpty(drawable.Name)
-                ? drawable.Name
+            var unresolvedName = string.IsNullOrWhiteSpace(drawable.Name) ||
+                                 drawable.Name.EndsWith("#dd", StringComparison.OrdinalIgnoreCase);
+            var renamedDrawable = unresolvedName
+                ? (drawables.Length == 1 ? operation.NewDrawableName : drawable.Name)
                 : ReplaceSlot(drawable.Name, operation.OldSlot, operation.NewSlot);
-            if (!string.Equals(renamedDrawable, drawable.Name, StringComparison.Ordinal) && !string.IsNullOrEmpty(renamedDrawable))
+
+            if (unresolvedName && drawables.Length > 1)
+                throw new InvalidDataException("Drawable names are unresolved in a multi-drawable YDD; refusing to guess which entry to rename.");
+
+            if (!string.IsNullOrEmpty(renamedDrawable) &&
+                !string.Equals(renamedDrawable, drawable.Name, StringComparison.Ordinal))
             {
                 drawable.Name = renamedDrawable;
                 if (hashes != null && index < hashes.Length)
