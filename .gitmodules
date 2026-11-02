@@ -1,0 +1,3 @@
+[submodule "vendor/grzyClothTool"]
+	path = vendor/grzyClothTool
+	url = https://github.com/grzybeek/grzyClothTool.git
